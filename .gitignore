@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/*.log
+*.log
+
+# Backups
+backups/
+*.backup*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary
+documentation-export/
+docs-package-*.tar.gz
