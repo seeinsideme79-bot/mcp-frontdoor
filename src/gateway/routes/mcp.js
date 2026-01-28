@@ -1,50 +1,107 @@
 /**
- * MCP Protocol Route
- * Handles MCP JSON-RPC requests for Claude Desktop
+ * MCP Gateway Route
+ * - Enforces Accept header requirements for StreamableHTTP (SSE)
+ * - Proxies requests to MCP handler
+ * - Forces chunked transfer by stripping Content-Length (upstream may set it)
  */
 
 const express = require('express');
+const router = express.Router();
 const mcpHandler = require('../../mcp/handler');
 
-const router = express.Router();
+function hasRequiredAccept(req) {
+  const accept = String(req.headers['accept'] || '').toLowerCase();
+  return accept.includes('application/json') && accept.includes('text/event-stream');
+}
 
-// MCP protocol endpoint (Stateless Streamable HTTP)
-router.post('/', async (req, res) => {
+function notAcceptable(res) {
+  // Keep it JSON (not SSE) so curl/jq can read the error cleanly
+  return res.status(406).json({
+    jsonrpc: '2.0',
+    error: {
+      code: -32000,
+      message: 'Not Acceptable: Client must accept both application/json and text/event-stream'
+    },
+    id: null
+  });
+}
+
+/**
+ * Force "chunked" behavior for SSE by preventing Content-Length from being set.
+ * Some upstream libs build the whole body and try to set Content-Length; this breaks
+ * the expected "streaming" feel and can confuse proxies/clients.
+ */
+function forceChunkedSSE(res) {
+  // Block any future Content-Length header attempts
+  const origSetHeader = res.setHeader.bind(res);
+  res.setHeader = (name, value) => {
+    const key = String(name || '').toLowerCase();
+    if (key === 'content-length') return;
+    return origSetHeader(name, value);
+  };
+
+  // Intercept writeHead so we can delete Content-Length even if passed in headers
+  const origWriteHead = res.writeHead.bind(res);
+  res.writeHead = (statusCode, reasonPhrase, headers) => {
+    let rp = reasonPhrase;
+    let h = headers;
+
+    // Node allows writeHead(status, headers)
+    if (typeof rp === 'object' && rp !== null) {
+      h = rp;
+      rp = undefined;
+    }
+
+    // Remove content-length from header object if present
+    if (h && typeof h === 'object') {
+      for (const k of Object.keys(h)) {
+        if (String(k).toLowerCase() === 'content-length') {
+          delete h[k];
+        }
+      }
+    }
+
+    // Remove any already-set Content-Length and ensure chunked
+    try { res.removeHeader('Content-Length'); } catch (_) {}
+    try { origSetHeader('Transfer-Encoding', 'chunked'); } catch (_) {}
+
+    // Continue with original writeHead
+    if (rp !== undefined) return origWriteHead(statusCode, rp, h);
+    return origWriteHead(statusCode, h);
+  };
+}
+
+router.all('/', async (req, res) => {
+  // Only allow MCP methods (match your root doc)
+  if (!['POST', 'GET', 'DELETE'].includes(req.method)) {
+    return res.status(405).json({
+      error: 'Method Not Allowed',
+      allowed: ['POST', 'GET', 'DELETE']
+    });
+  }
+
+  // Enforce required Accept header for StreamableHTTP transport
+  if (!hasRequiredAccept(req)) {
+    return notAcceptable(res);
+  }
+
+  // IMPORTANT: Do not eagerly write headers here (avoid ERR_HTTP_HEADERS_SENT).
+  // Instead, patch header writing to prevent Content-Length and force chunked.
+  forceChunkedSSE(res);
+
   try {
+    // Express json middleware already parsed body for POST
     await mcpHandler.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error('[MCP] POST Error:', error.message);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: '2.0',
-        error: { code: -32603, message: 'Internal server error' },
-        id: null
-      });
+  } catch (err) {
+    if (res.headersSent) {
+      try { res.end(); } catch (_) {}
+      return;
     }
-  }
-});
-
-// MCP SSE endpoint (for real-time notifications)
-router.get('/', async (req, res) => {
-  try {
-    await mcpHandler.handleRequest(req, res);
-  } catch (error) {
-    console.error('[MCP] GET Error:', error.message);
-    if (!res.headersSent) {
-      res.status(500).send('Internal server error');
-    }
-  }
-});
-
-// MCP DELETE endpoint (session termination)
-router.delete('/', async (req, res) => {
-  try {
-    await mcpHandler.handleRequest(req, res);
-  } catch (error) {
-    console.error('[MCP] DELETE Error:', error.message);
-    if (!res.headersSent) {
-      res.status(500).send('Internal server error');
-    }
+    return res.status(500).json({
+      jsonrpc: '2.0',
+      error: { code: -32000, message: `Internal error: ${err.message}` },
+      id: null
+    });
   }
 });
 

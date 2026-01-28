@@ -22,14 +22,20 @@ class FilesystemMCPTool {
    * @throws {Error} If path is outside allowed directory
    */
   _validatePath(userPath) {
-    // Resolve to absolute path
     const resolvedPath = path.resolve(ALLOWED_BASE, userPath);
-    
-    // Ensure it's within allowed base
-    if (!resolvedPath.startsWith(ALLOWED_BASE)) {
+
+    // Strong boundary check using path.relative (prevents prefix bypass)
+    const rel = path.relative(ALLOWED_BASE, resolvedPath);
+
+    const escapesBase =
+      rel === '..' ||
+      rel.startsWith('..' + path.sep) ||
+      path.isAbsolute(rel);
+
+    if (escapesBase) {
       throw new Error(`Access denied: Path must be within ${ALLOWED_BASE}`);
     }
-    
+
     return resolvedPath;
   }
 
@@ -41,17 +47,14 @@ class FilesystemMCPTool {
   async readFile(filePath) {
     try {
       const fullPath = this._validatePath(filePath);
-      
-      // Check if file exists
+
       const stats = await fs.stat(fullPath);
-      
       if (!stats.isFile()) {
         throw new Error('Path is not a file');
       }
-      
-      // Read file content
+
       const content = await fs.readFile(fullPath, 'utf8');
-      
+
       return {
         path: filePath,
         fullPath: fullPath,
@@ -70,19 +73,19 @@ class FilesystemMCPTool {
    * @param {string} content - Content to write
    * @returns {Promise<Object>} Write result
    */
-async writeFile(filePath, content) {
+  async writeFile(filePath, content) {
     try {
       const fullPath = this._validatePath(filePath);
-    
+
       // Ensure parent directory exists
       const parentDir = path.dirname(fullPath);
       await fs.mkdir(parentDir, { recursive: true });
-    
+
       // Write file
-      await fs.writeFile(fullPath, content, 'utf8');      
-      // Get stats
+      await fs.writeFile(fullPath, content, 'utf8');
+
       const stats = await fs.stat(fullPath);
-      
+
       return {
         path: filePath,
         fullPath: fullPath,
@@ -103,23 +106,19 @@ async writeFile(filePath, content) {
   async listDirectory(dirPath = '.') {
     try {
       const fullPath = this._validatePath(dirPath);
-      
-      // Check if directory exists
+
       const stats = await fs.stat(fullPath);
-      
       if (!stats.isDirectory()) {
         throw new Error('Path is not a directory');
       }
-      
-      // Read directory
+
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
-      
-      // Map entries with metadata
+
       const items = await Promise.all(
         entries.map(async (entry) => {
           const itemPath = path.join(fullPath, entry.name);
           const itemStats = await fs.stat(itemPath);
-          
+
           return {
             name: entry.name,
             type: entry.isDirectory() ? 'directory' : 'file',
@@ -128,7 +127,7 @@ async writeFile(filePath, content) {
           };
         })
       );
-      
+
       return {
         path: dirPath,
         fullPath: fullPath,
@@ -149,10 +148,9 @@ async writeFile(filePath, content) {
   async createDirectory(dirPath, recursive = true) {
     try {
       const fullPath = this._validatePath(dirPath);
-      
-      // Create directory
+
       await fs.mkdir(fullPath, { recursive });
-      
+
       return {
         path: dirPath,
         fullPath: fullPath,
