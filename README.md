@@ -28,11 +28,12 @@ tail -f ~/projects/remote-mcp-server/logs/remote-mcp-server-access.log
 ## Features
 
 ### Tools
-- **GitHub Tools** (7 operations)
+- **GitHub Tools** (10 operations)
   - Repository management
   - Issue tracking
-  - File operations
+  - File operations (read + write)
   - Code search
+  - Pull requests
 - **Filesystem Tools** (4 operations)
   - Read/Write files
   - Directory management
@@ -105,3 +106,4 @@ DEBUG_MODE=false  # Set to true for detailed debug logs
 - ✅ Implemented debug mode for controlled logging
 - ✅ Enhanced security with scope-based authorization
 - ✅ Improved error handling and logging middleware
+- ✅ Added GitHub write operations (update_file, create_or_update_files, create_pull_request)

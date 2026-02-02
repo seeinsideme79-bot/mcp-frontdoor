@@ -1,28 +1,101 @@
-# GitHub Tool
+# GitHub MCP Tool
 
-GitHub repository and issue management operations.
+GitHub API integration for MCP protocol with read and write operations.
 
-## Operations (7)
+## Available Operations
 
-1. **list_repositories** - List user's repositories
-2. **get_repository** - Get repository details
-3. **list_issues** - List repository issues
-4. **create_issue** - Create new issue
-5. **get_file_content** - Read file from repository
-6. **search_code** - Search code across repositories
-7. **list_branches** - List repository branches
+### Read Operations (7 tools)
+- **list_repositories** - List repositories for authenticated user
+- **get_repository** - Get detailed repository information
+- **list_branches** - List branches in a repository
+- **list_issues** - List issues with filtering
+- **get_file_content** - Get content of a file
+- **search_code** - Search code across repositories
 
-## Configuration
+### Write Operations (3 tools - NEW)
+- **update_file** - Create or update a single file
+- **create_or_update_files** - Create or update multiple files in a single commit
+- **create_pull_request** - Create a pull request
+- **create_issue** - Create a new issue
 
-Set `GITHUB_TOKEN` in `.env`:
-```bash
-GITHUB_TOKEN=ghp_your_token_here
+## OAuth Scopes
+
+### git:read
+Required for:
+- list_repositories
+- get_repository
+- list_branches
+- search_code
+- get_file_content
+
+### git:write
+Required for:
+- update_file
+- create_or_update_files
+- create_pull_request
+
+### issues:read
+Required for:
+- list_issues
+
+### issues:write
+Required for:
+- create_issue
+
+## Usage Examples
+
+### Update Single File
+```javascript
+await updateFile(
+  'owner',
+  'repo',
+  'path/to/file.txt',
+  'file content',
+  'commit message',
+  'main',  // branch (optional)
+  null     // sha (optional, auto-detected)
+);
 ```
 
-**Token Requirements:**
-- Scope: `repo` (full control of private repositories)
-- Generate at: https://github.com/settings/tokens
+### Update Multiple Files in One Commit
+```javascript
+await createOrUpdateFiles(
+  'owner',
+  'repo',
+  'main',
+  'Update documentation',
+  [
+    { path: 'README.md', content: 'new readme' },
+    { path: 'docs/API.md', content: 'new api docs' }
+  ]
+);
+```
 
-## Error Handling
+### Create Pull Request
+```javascript
+await createPullRequest(
+  'owner',
+  'repo',
+  'Feature: Add new functionality',
+  'feature-branch',  // head (source)
+  'main',            // base (target)
+  'PR description'   // body (optional)
+);
+```
 
-All methods throw descriptive errors.
+## Implementation Notes
+
+- Uses @octokit/rest for GitHub API
+- Requires GITHUB_TOKEN environment variable
+- Token needs repo scope for write operations
+- Auto-detects file SHA for updates
+- Supports creating new files (omit SHA)
+- Multiple file commits use Git Tree API for atomicity
+
+## Recent Updates (Feb 2026)
+
+- ✅ Added update_file for single file operations
+- ✅ Added create_or_update_files for atomic multi-file commits
+- ✅ Added create_pull_request for PR creation
+- ✅ Enhanced error handling and validation
+- ✅ Added OAuth scope mappings
