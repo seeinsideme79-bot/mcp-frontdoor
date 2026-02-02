@@ -1,109 +1,147 @@
-# MCP Frontdoor - Continue Prompt (Updated: 2026-01-28)
+# MCP Frontdoor - Continue Prompt
+## Updated: 2026-02-03 | Session 4
 
-Use this prompt to resume work on MCP Frontdoor with full context.
+Yeni sessiona başlamak için bu dosyayı oku ve içeriğini paste et.
 
-## Current System State
+---
 
-### Infrastructure (Ubuntu Server)
-- **Location:** Oracle Cloud Free Tier (1GB RAM, 1 vCPU)
-- **Domain:** mcp.seeinside.me → 129.151.229.128
-- **OS:** Ubuntu 24.04 LTS
-- **Services:** Nginx (443→9100), Node.js (9100), systemd
+## 🏗️ Infrastructure
+
+- **Server:** Oracle Cloud Free Tier - Ubuntu 24.04
+- **IP:** 129.151.229.128
+- **SSH:** `ssh -i ssh-key-2026-01-01.key ubuntu@129.151.229.128`
+- **Domain:** mcp.seeinside.me
+- **Port:** 9100 (Node.js) → Nginx reverse proxy → 443
 - **SSL:** Let's Encrypt (auto-renew)
-- **Firewall:** UFW (22, 80, 443 open)
+- **Firewall:** UFW (22, 80, 443)
+- **Service:** systemd → remote-mcp-server.service
 
-### Application Structure
+---
+
+## 📁 Uygulama Yapısı
 ```
 remote-mcp-server/
-├── index.js              - Entry point
+├── index.js                  - Entry point
+├── .env                      - Environment variables (chmod 600)
+├── package.json
 ├── src/
-│   ├── server.js         - Express app
-│   ├── gateway/          - REST API layer
-│   │   ├── routes/       - health, github, mcp
-│   │   └── middleware/   - auth, logger
-│   ├── mcp/              - MCP protocol (handler.js)
-│   └── tools/            - Business logic
-│       ├── github-mcp/   - 7 GitHub operations
-│       └── filesystem-mcp/ - 4 filesystem operations
-├── api/                  - OpenAPI specs (future)
-├── docs/                 - Documentation
-└── scripts/              - Utility scripts
+│   ├── server.js             - Express app + keepAliveTimeout (25s)
+│   ├── gateway/
+│   │   ├── routes/
+│   │   │   ├── mcp.js        - MCP endpoint (GET SSE + POST)
+│   │   │   ├── health.js     - Health check
+│   │   │   └── github.js     - GitHub REST routes
+│   │   ├── middleware/
+│   │   │   ├── auth.js       - PAT + OAuth JWT auth
+│   │   │   └── logger.js     - Request logging
+│   │   └── oauth/
+│   │       ├── scopePolicy.js
+│   │       └── wwwAuthenticate.js
+│   ├── mcp/
+│   │   ├── handler.js        - MCP protocol + Zod schemas
+│   │   └── toolAuth.js       - Scope mapping per tool
+│   └── tools/
+│       ├── github-mcp/index.js      - 10 GitHub operations
+│       └── filesystem-mcp/index.js  - 4 Filesystem operations
+├── docs/
+│   ├── CONTINUE-PROMPT.md
+│   ├── DEPLOYMENT.md
+│   └── ARCHITECTURE.md
+└── logs/
 ```
 
-### Tools Registered (11 total)
-**GitHub (7):** list_repositories, get_repository, list_issues, create_issue, get_file_content, search_code, list_branches  
-**Filesystem (4):** read_file, write_file, list_directory, create_directory
+---
 
-### Security
-- Bearer token auth (MCP_AUTH_TOKEN)
-- Filesystem: restricted to /home/ubuntu/projects
-- HTTPS/TLS enforced
-- Path validation (directory traversal prevention)
+## 🛠️ Tools (14 Total)
 
-### Windows Client
-- Claude Desktop config: %APPDATA%\Claude\claude_desktop_config.json
-- Wrapper: %USERPROFILE%\mcp-frontdoor\mcp-remote.cmd
-- Transport: mcp-remote package (stdio→HTTP bridge)
+**GitHub Read (7):** list_repositories, get_repository, list_issues, create_issue, get_file_content, search_code, list_branches
+**GitHub Write (3):** update_file, create_or_update_files, create_pull_request
+**Filesystem (4):** read_file, write_file, list_directory, create_directory (base: /home/ubuntu/projects)
 
-## Completed Work
-✅ Modular refactoring (Gateway/MCP/Tools layers)
-✅ 15 README files
-✅ Filesystem tool (with parent dir creation)
-✅ Systemd service (auto-start)
-✅ Production deployment
-✅ Claude Desktop integration
-✅ Full documentation
+---
 
-## Next Steps (Options)
+## 🔐 Auth
 
-### Option A: ChatGPT Integration
-1. Create api/openapi.json
-2. Test with ChatGPT Actions
-3. Document setup
+- **PAT:** Claude Desktop/Web → MCP_AUTH_TOKEN → scope `*`
+- **OAuth:** ChatGPT Desktop/Web → Descope JWT → scopes: files:read/write, git:read/write, issues:read/write
 
-### Option B: Monitoring & Observability
-1. Add Prometheus metrics
-2. Implement rate limiting
-3. Enhanced logging
+---
 
-### Option C: Supabase Tool
-1. Design Supabase tool interface
-2. Implement CRUD operations
-3. Test integration
+## 💻 Windows Client (Şirket Bilgisayarı)
 
-## Key Commands
+- **Node:** `C:\Users\10015895\tools\node-v24.13.0-win-x64`
+- **mcp-frontdoor:** `C:\Users\10015895\mcp-frontdoor`
+- **Claude Desktop:** `C:\Users\10015895\AppData\Local\AnthropicClaude\app-1.1.1520\claude.exe`
 
-### Ubuntu
+### ⚠️ mcp-remote: npx -y KULLANIMAZ
+Asıl dosya: `node_modules\mcp-remote\dist\proxy.js`
+Reinstall: `npm.cmd install mcp-remote` (C:\Users\10015895\mcp-frontdoor'da)
+
+---
+
+## ⚙️ Timeout Fix (Session 4)
+
+**Sorun:** Claude Desktop write → timeout (restart sonrası çalışıyordu)
+**Root Cause:** mcp-remote stale connection + Nginx 3600s timeout
+**Çözüm:**
+- Nginx /mcp: proxy_read_timeout 30s, proxy_send_timeout 30s
+- Node: keepAliveTimeout=25s, headersTimeout=26s
+- /auth/ location: 3600s kaldı
+
+---
+
+## ✅ Tamamlanan (Session 1-4)
+- Modular architecture (Gateway/MCP/Tools)
+- 14 tools (10 GitHub + 4 Filesystem)
+- OAuth 2.0 (Descope + JWT + scopes)
+- Claude Desktop Read+Write ✅
+- ChatGPT Desktop Read+Write ✅
+- mcp-remote local install fix
+- Keepalive timeout fix
+- Production deployment
+
+## 📋 Yapılacaklar
+### 🔴 Yüksek
+1. configs/ + setup.sh (yeni server automation)
+2. Winston logging (console.log → structured)
+3. Rate limiting (express-rate-limit)
+
+### 🟡 Orta
+4. Prometheus + Grafana
+5. Redis caching
+
+### 🟢 Düşük
+6. Sentry, Swagger, GitHub Actions CI/CD
+7. delete_file, create_repository tools
+8. Supabase, Multi-tenancy
+
+---
+
+## 🔑 Commands
+
+### SSH
 ```bash
-# Service management
-sudo systemctl restart remote-mcp-server
-sudo journalctl -u remote-mcp-server -f
-
-# Health check
-curl -sS https://mcp.seeinside.me/health | jq .
-
-# Logs
+ssh -i ssh-key-2026-01-01.key ubuntu@129.151.229.128
+sudo systemctl restart remote-mcp-server.service
 tail -f ~/projects/remote-mcp-server/logs/remote-mcp-server-access.log
+curl -s https://mcp.seeinside.me/health | jq
+# Debug toggle
+sed -i 's/DEBUG_MODE=false/DEBUG_MODE=true/' .env && sudo systemctl restart remote-mcp-server.service
 ```
 
-### Windows
+### PowerShell
 ```powershell
-# Restart Claude Desktop
-Get-Process -Name "Claude" | Stop-Process -Force
-Start-Process "$env:LOCALAPPDATA\Programs\Claude\Claude.exe"
-
-# View config
-Get-Content "$env:APPDATA\Claude\claude_desktop_config.json"
+type $env:APPDATA\Claude\claude_desktop_config.json
+Get-ChildItem "$env:APPDATA\Claude\logs" -Filter "mcp*"
+cd C:\Users\10015895\mcp-frontdoor; npm.cmd install mcp-remote  # reinstall
 ```
 
-## Important Notes
-- Token stored in .env (chmod 600)
-- Nginx config: /etc/nginx/sites-enabled/mcp
-- Systemd service: /etc/systemd/system/remote-mcp-server.service
-- Backups: ~/projects/remote-mcp-server-backup-*
+---
 
-## Communication Style
-- Step-by-step approach
-- Ask for approval before risky changes
-- Provide rollback plans
-- Test incrementally
+## 📝 Rules
+- Şirket PC → global install yapılamaz
+- PowerShell'de /dev/null yok, Linux komutları yok
+- Secrets chat'te paylaşılmaz
+- Risky işler için approval al
+- bash tool = root user, ubuntu home erişemez → SSH kullan
+- MCP tools timeout olabilir → SSH fallback

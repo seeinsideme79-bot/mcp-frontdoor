@@ -53,13 +53,18 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '127.0.0.1', () => {
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`Remote MCP Server listening on http://127.0.0.1:${PORT}`);
   console.log(`Mode: Stateless (multi-client support)`);
   console.log(`Health check: http://127.0.0.1:${PORT}/health`);
   console.log(`MCP endpoint: POST/GET/DELETE http://127.0.0.1:${PORT}/mcp`);
   console.log(`Available tools: GitHub, Filesystem`);
 });
+
+
+// Keep-alive timeout (Nginx 30s proxy timeout ile uyumlu)
+server.keepAliveTimeout = 25000;
+server.headersTimeout = 26000;
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

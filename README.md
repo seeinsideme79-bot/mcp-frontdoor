@@ -108,3 +108,6 @@ DEBUG_MODE=false  # Set to true for detailed debug logs
 - ✅ Added GitHub write operations (update_file, create_or_update_files, create_pull_request)
 - ✅ Verified write operations with ChatGPT Desktop
 - ✅ Production deployment completed and tested
+- ✅ Fixed Claude Desktop write timeout (Nginx keepalive 30s + Node keepAliveTimeout 25s)
+- ✅ Fixed mcp-remote timeout (local install via proxy.js, npx -y removed)
+- ✅ Verified Claude Desktop read + write operations working without restart
