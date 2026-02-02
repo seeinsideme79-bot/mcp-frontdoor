@@ -12,17 +12,9 @@ const { requiredScopesForTool, hasRequiredScopes } = require('../oauth/scopePoli
 const { buildWwwAuthenticate } = require('../oauth/wwwAuthenticate');
 const { securitySchemesForTool } = require('../../mcp/toolAuth');
 
-// Debug mode from environment
-const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
-
 function hasRequiredAccept(req) {
   const accept = String(req.headers['accept'] || '').toLowerCase();
-  // Allow empty/*/* for connection probes
-  if (!accept || accept.includes('*/*')) return true;
-  // ChatGPT Desktop only sends application/json (without SSE), accept it
-  if (accept.includes('application/json')) return true;
-  // Legacy: also accept if both JSON and SSE are present
-  return accept.includes('text/event-stream');
+  return accept.includes('application/json') && accept.includes('text/event-stream');
 }
 
 function notAcceptable(res) {
@@ -31,7 +23,7 @@ function notAcceptable(res) {
     jsonrpc: '2.0',
     error: {
       code: -32000,
-      message: 'Not Acceptable: Client must send Accept header with application/json or text/event-stream'
+      message: 'Not Acceptable: Client must accept both application/json and text/event-stream'
     },
     id: null
   });
@@ -42,16 +34,6 @@ function notAcceptable(res) {
     let buffer = '';
     const origWrite = res.write.bind(res);
     const origEnd = res.end.bind(res);
-
-    function chunkToString(chunk) {
-      if (chunk == null) return '';
-      if (Buffer.isBuffer(chunk)) return chunk.toString('utf8');
-      if (ArrayBuffer.isView(chunk)) {
-        return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength).toString('utf8');
-      }
-      if (chunk instanceof ArrayBuffer) return Buffer.from(chunk).toString('utf8');
-      return String(chunk);
-    }
 
     function transformEvent(evt) {
       try {
@@ -93,7 +75,7 @@ function notAcceptable(res) {
 
     res.write = (chunk, encoding, cb) => {
       if (typeof encoding === 'function') { cb = encoding; encoding = undefined; }
-      buffer += chunkToString(chunk);
+      buffer += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
       flushCompleteEvents();
       if (typeof cb === 'function') cb();
       return true;
@@ -102,7 +84,7 @@ function notAcceptable(res) {
     res.end = (chunk, encoding, cb) => {
       if (typeof chunk === 'function') { cb = chunk; chunk = undefined; encoding = undefined; }
       else if (typeof encoding === 'function') { cb = encoding; encoding = undefined; }
-      if (chunk) buffer += chunkToString(chunk);
+      if (chunk) buffer += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
       if (buffer.length) origWrite(transformEvent(buffer));
       buffer = '';
       return origEnd(undefined, encoding, cb);
@@ -156,82 +138,17 @@ function forceChunkedSSE(res) {
 }
 
 router.all('/', async (req, res) => {
-  const timestamp = new Date().toISOString();
-
-  // ===== LOGGING: DEBUG MODE vs PRODUCTION MODE =====
-  if (DEBUG_MODE) {
-    // Detailed debug logging (current behavior)
-    console.log('\n' + '='.repeat(80));
-    console.log(`[${timestamp}] Incoming ${req.method} request to /mcp`);
-    console.log('IP:', req.ip || req.connection.remoteAddress);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
-    console.log('Body:', JSON.stringify(req.body, null, 2));
-    console.log('Auth:', req.auth ? JSON.stringify(req.auth, null, 2) : 'No auth');
-    console.log('='.repeat(80) + '\n');
-  } else {
-    // Minimal production logging (no sensitive data)
-    const ip = req.ip || req.connection.remoteAddress;
-    const authStatus = req.auth ? `✓ (${req.auth.sub})` : '✗';
-    const method = req.body?.method || req.method;
-    console.log(`[${timestamp}] ${req.method} /mcp | IP: ${ip} | Auth: ${authStatus} | Method: ${method}`);
-  }
-  // ===== END LOGGING =====
-
   // Only allow MCP methods (match your root doc)
-  if (!['POST', 'GET', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (!['POST', 'GET', 'DELETE'].includes(req.method)) {
     return res.status(405).json({
       error: 'Method Not Allowed',
-      allowed: ['POST', 'GET', 'DELETE', 'HEAD', 'OPTIONS']
+      allowed: ['POST', 'GET', 'DELETE']
     });
   }
-    // Connection probes (ChatGPT Desktop does GET/HEAD/OPTIONS during setup)
-
-  if (req.method === 'OPTIONS') {
-
-    res.setHeader('Allow', 'POST, GET, DELETE, HEAD, OPTIONS');
-
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, HEAD, OPTIONS');
-
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept');
-
-    return res.status(204).end();
-
-  }
-
-  if (req.method === 'HEAD') {
-
-    return res.status(200).end();
-
-  }
-
-  if (req.method === 'GET') {
-
-    return res.status(200).json({
-
-      ok: true,
-
-      endpoint: '/mcp',
-
-      transport: 'streamable-http'
-
-    });
-
-  }
-
-
 
   // Enforce required Accept header for StreamableHTTP transport
-  if (req.method === 'POST' && !hasRequiredAccept(req)) {
+  if (!hasRequiredAccept(req)) {
     return notAcceptable(res);
-  }
-
-  // SDK Accept header bypass: ensure SDK sees both JSON and SSE
-  // This must happen BEFORE mcpHandler.handleRequest is called
-  if (req.method === 'POST') {
-    const accept = String(req.headers.accept || '').toLowerCase();
-    if (!accept.includes('text/event-stream')) {
-      req.headers.accept = 'application/json, text/event-stream';
-    }
   }
 
   // Auth gate: tools/call requires OAuth scopes (or PAT * )

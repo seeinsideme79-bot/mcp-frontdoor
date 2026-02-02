@@ -10,10 +10,12 @@ const loggerMiddleware = require('./gateway/middleware/logger');
 const healthRoute = require('./gateway/routes/health');
 const githubRoute = require('./gateway/routes/github');
 const mcpRoute = require('./gateway/routes/mcp');
+const wellKnownRoute = require('./gateway/routes/wellKnown');
 const mcpHandler = require('./mcp/handler');
 
 const app = express();
 const PORT = process.env.PORT || 9100;
+app.set('trust proxy', true);
 
 // Create MCP Server instance (stateless mode)
 const mcpServer = mcpHandler.createMcpServer();
@@ -21,6 +23,8 @@ const mcpServer = mcpHandler.createMcpServer();
 // Middleware
 app.use(express.json());
 app.use(loggerMiddleware);
+// Public OAuth metadata (must be accessible without auth)
+app.use('/.well-known', wellKnownRoute);
 app.use(authMiddleware);
 
 // Routes

@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 // Allowed base directory (security boundary)
-const ALLOWED_BASE = '/home/ubuntu/projects';
+const ALLOWED_BASE = '/home/ubuntu';
 
 /**
  * Filesystem MCP Tool

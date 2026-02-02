@@ -16,7 +16,7 @@ let mcpServer = null;
  * These schemas will be exposed via tools/list and used for validation.
  */
 const TOOL_SCHEMAS = {
-  // --- GitHub tools ---
+  // --- GitHub tools (read) ---
   list_repositories: z.object({}),
 
   get_repository: z.object({
@@ -56,6 +56,39 @@ const TOOL_SCHEMAS = {
     query: z.string(),
     // accept number or string -> coerce
     limit: z.coerce.number().int().positive().optional()
+  }),
+
+  // --- GitHub tools (write) ---
+  update_file: z.object({
+    owner: z.string(),
+    repo: z.string(),
+    path: z.string(),
+    content: z.string(),
+    message: z.string(),
+    branch: z.string().optional(),
+    sha: z.string().optional()
+  }),
+
+  create_or_update_files: z.object({
+    owner: z.string(),
+    repo: z.string(),
+    branch: z.string(),
+    message: z.string(),
+    files: z.array(
+      z.object({
+        path: z.string(),
+        content: z.string()
+      })
+    )
+  }),
+
+  create_pull_request: z.object({
+    owner: z.string(),
+    repo: z.string(),
+    title: z.string(),
+    head: z.string(),
+    base: z.string(),
+    body: z.string().optional()
   }),
 
   // --- Filesystem tools ---
